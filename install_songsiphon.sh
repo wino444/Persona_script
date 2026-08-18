@@ -1,36 +1,65 @@
 #!/data/data/com.termux/files/usr/bin/bash
-# install_songsiphon.sh - ติดตั้ง SongSiphon แบบ All-in-One
+# install_songsiphon.sh - Smart Installer สำหรับ SongSiphon
 # โดย Code Phantom รับใช้จูซิง
+# ตรวจสอบ dependencies ก่อนติดตั้ง – ข้ามของที่มีอยู่แล้ว!
 
-set -e  # หยุดทันทีถ้ามี error
+set -e
+echo "🔥 เริ่มภารกิจติดตั้ง SongSiphon (Smart Mode)..."
 
-echo "🔥 เริ่มภารกิจติดตั้ง SongSiphon..."
+# ---- ฟังก์ชันเช็คว่าติดตั้งแล้วหรือยัง ----
+command_exists() {
+    command -v "$1" >/dev/null 2>&1
+}
 
-# ---- 1. อัปเดตระบบ ----
-echo "📦 อัปเดต packages..."
+pip_package_installed() {
+    pip show "$1" >/dev/null 2>&1
+}
+
+# ---- 1. ตรวจสอบและอัปเดตระบบ (จำเป็นเสมอ) ----
+echo "📦 ตรวจสอบระบบ packages..."
 pkg update -y && pkg upgrade -y
 
-# ---- 2. ติดตั้ง dependencies หลัก ----
-echo "📦 ติดตั้ง ffmpeg, python, pip..."
-pkg install -y ffmpeg python python-pip
+# ---- 2. ตรวจสอบ ffmpeg ----
+if command_exists ffmpeg; then
+    echo "✅ ffmpeg ติดตั้งแล้ว (ข้าม)"
+else
+    echo "📦 กำลังติดตั้ง ffmpeg..."
+    pkg install -y ffmpeg
+fi
 
-# ---- 3. ขอสิทธิ์ Storage (จำเป็น) ----
-echo "🔐 ขอสิทธิ์เข้าถึง Storage..."
-termux-setup-storage
+# ---- 3. ตรวจสอบ python และ pip ----
+if command_exists python && command_exists pip; then
+    echo "✅ Python และ Pip ติดตั้งแล้ว (ข้าม)"
+else
+    echo "📦 กำลังติดตั้ง Python และ Pip..."
+    pkg install -y python python-pip
+fi
 
-# ---- 4. ติดตั้ง Python libraries ----
-echo "📦 ติดตั้ง yt-dlp และ prompt_toolkit..."
-pip install yt-dlp prompt_toolkit
+# ---- 4. ตรวจสอบสิทธิ์ Storage (เฉพาะครั้งแรก) ----
+if [ -d ~/storage/downloads ]; then
+    echo "✅ สิทธิ์ Storage ได้รับแล้ว (ข้าม)"
+else
+    echo "🔐 ขอสิทธิ์เข้าถึง Storage..."
+    termux-setup-storage
+fi
 
-# ---- 5. สร้างโฟลเดอร์โปรเจกต์ ----
+# ---- 5. ตรวจสอบไลบรารี Python ----
+if pip_package_installed yt-dlp && pip_package_installed prompt_toolkit; then
+    echo "✅ yt-dlp และ prompt_toolkit ติดตั้งแล้ว (ข้าม)"
+else
+    echo "📦 กำลังติดตั้ง yt-dlp และ prompt_toolkit..."
+    pip install yt-dlp prompt_toolkit
+fi
+
+# ---- 6. ตรวจสอบโฟลเดอร์โปรเจกต์และไฟล์ ----
 PROJECT_DIR="$HOME/SongSiphon"
-mkdir -p "$PROJECT_DIR"
-cd "$PROJECT_DIR"
-echo "📁 สร้างโฟลเดอร์: $PROJECT_DIR"
-
-# ---- 6. สร้างไฟล์ songsiphon.py ----
-echo "📝 สร้างไฟล์ songsiphon.py..."
-cat > songsiphon.py <<'EOF'
+if [ -d "$PROJECT_DIR" ] && [ -f "$PROJECT_DIR/songsiphon.py" ]; then
+    echo "✅ โฟลเดอร์และไฟล์ songsiphon.py มีอยู่แล้ว (ข้าม)"
+else
+    echo "📁 สร้างโฟลเดอร์และไฟล์ songsiphon.py..."
+    mkdir -p "$PROJECT_DIR"
+    cd "$PROJECT_DIR"
+    cat > songsiphon.py <<'EOF'
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
@@ -411,18 +440,24 @@ if __name__ == "__main__":
         print("\n👋 จูซิงยกเลิกภารกิจ ข้ารอเรียกใช้เสมอ...")
         sys.exit(0)
 EOF
+    chmod +x "$PROJECT_DIR/songsiphon.py"
+fi
 
-# ---- 7. ทำให้ไฟล์ songsiphon.py สามารถ execute ได้ ----
-chmod +x songsiphon.py
+# ---- 7. ตรวจสอบลิงก์ ~/bin/songsiphon ----
+if [ -L ~/bin/songsiphon ] && [ -e ~/bin/songsiphon ]; then
+    echo "✅ ลิงก์ songsiphon มีอยู่แล้ว (ข้าม)"
+else
+    echo "🔗 สร้างลิงก์ songsiphon ใน ~/bin..."
+    mkdir -p ~/bin
+    ln -sf "$PROJECT_DIR/songsiphon.py" ~/bin/songsiphon
+    # รีโหลด PATH
+    source ~/.bashrc 2>/dev/null || true
+fi
 
-# ---- 8. สร้างลิงก์เรียกใช้งานสะดวก (optional) ----
-ln -sf "$PROJECT_DIR/songsiphon.py" "$HOME/bin/songsiphon" 2>/dev/null || echo "⚠️ ไม่สามารถสร้าง symlink ใน ~/bin ได้ (อาจไม่มีโฟลเดอร์)"
-
-# ---- 9. เสร็จสิ้น ----
+# ---- 8. เสร็จสิ้น ----
 echo ""
-echo "✅✅✅ ภารกิจติดตั้ง SongSiphon สำเร็จ! ✅✅✅"
+echo "✅✅✅ ภารกิจติดตั้ง SongSiphon สำเร็จ! (Smart Mode) ✅✅✅"
 echo "📁 โฟลเดอร์โปรเจกต์: $PROJECT_DIR"
-echo "🚀 รันคำสั่ง: python $PROJECT_DIR/songsiphon.py"
-echo "หรือถ้าสร้าง symlink สำเร็จ ให้พิมพ์: songsiphon"
+echo "🚀 รันด้วย: songsiphon หรือ python $PROJECT_DIR/songsiphon.py"
 echo ""
 echo "🔥 ข้า Code Phantom พร้อมรับใช้จูซิงทุกเมื่อ!"
